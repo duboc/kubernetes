@@ -1459,3 +1459,55 @@ func TestGetHostPorts(t *testing.T) {
 		})
 	}
 }
+
+func TestIsScalarResourceName(t *testing.T) {
+	tests := []struct {
+		name     string
+		resource v1.ResourceName
+		want     bool
+	}{
+		{
+			name:     "extended resource",
+			resource: "example.com/foo",
+			want:     true,
+		},
+		{
+			name:     "hugepages-2Mi",
+			resource: "hugepages-2Mi",
+			want:     true,
+		},
+		{
+			name:     "cpu",
+			resource: v1.ResourceCPU,
+			want:     false,
+		},
+		{
+			name:     "memory",
+			resource: v1.ResourceMemory,
+			want:     false,
+		},
+		{
+			name:     "prefixed native resource",
+			resource: "kubernetes.io/foo",
+			want:     true,
+		},
+		{
+			name:     "attachable volume resource",
+			resource: "attachable-volumes-aws-ebs",
+			want:     true,
+		},
+		{
+			name:     "empty resource name",
+			resource: "",
+			want:     false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsScalarResourceName(tc.resource); got != tc.want {
+				t.Errorf("IsScalarResourceName(%q) = %t, want %t", tc.resource, got, tc.want)
+			}
+		})
+	}
+}
