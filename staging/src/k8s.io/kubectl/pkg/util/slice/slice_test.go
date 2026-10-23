@@ -19,6 +19,7 @@ package slice
 import (
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -28,6 +29,75 @@ func TestSortInts64(t *testing.T) {
 	SortInts64(src)
 	if !reflect.DeepEqual(src, expected) {
 		t.Errorf("func Ints64 didnt sort correctly, %v !- %v", src, expected)
+	}
+}
+
+func TestContainsString(t *testing.T) {
+	testCases := []struct {
+		name     string
+		slice    []string
+		s        string
+		modifier func(string) string
+		expected bool
+	}{
+		{
+			name:     "nil modifier with match",
+			slice:    []string{"foo", "bar", "baz"},
+			s:        "bar",
+			modifier: nil,
+			expected: true,
+		},
+		{
+			name:     "nil modifier with no match",
+			slice:    []string{"foo", "bar", "baz"},
+			s:        "qux",
+			modifier: nil,
+			expected: false,
+		},
+		{
+			name:     "nil modifier with case mismatch",
+			slice:    []string{"Foo", "bar"},
+			s:        "foo",
+			modifier: nil,
+			expected: false,
+		},
+		{
+			name:     "strings.ToLower modifier with case-insensitive match",
+			slice:    []string{"Foo", "bar"},
+			s:        "foo",
+			modifier: strings.ToLower,
+			expected: true,
+		},
+		{
+			name:     "strings.ToLower modifier with no match",
+			slice:    []string{"Foo", "bar"},
+			s:        "baz",
+			modifier: strings.ToLower,
+			expected: false,
+		},
+		{
+			name:     "empty slice",
+			slice:    []string{},
+			s:        "foo",
+			modifier: nil,
+			expected: false,
+		},
+		{
+			name:     "nil slice",
+			slice:    nil,
+			s:        "foo",
+			modifier: nil,
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual := ContainsString(tc.slice, tc.s, tc.modifier)
+			if actual != tc.expected {
+				t.Errorf("ContainsString(%v, %q, modifier) = %v; want %v", tc.slice, tc.s, actual, tc.expected)
+			}
+		})
 	}
 }
 
