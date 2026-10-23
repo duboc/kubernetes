@@ -70,3 +70,49 @@ func TestPodAndPodDesc(t *testing.T) {
 		assert.Equalf(t, testCase.expectedValue, realPodDesc, "Failed to test: %s", testCase.caseName)
 	}
 }
+
+func TestPodDesc(t *testing.T) {
+	testCases := []struct {
+		caseName      string
+		podName       string
+		podNamespace  string
+		podUID        types.UID
+		expectedValue string
+	}{
+		{
+			caseName:      "empty_name",
+			podName:       "",
+			podNamespace:  metav1.NamespaceDefault,
+			podUID:        "551f5a43-9f2f-11e7-a589-fa163e148d75",
+			expectedValue: "_default(551f5a43-9f2f-11e7-a589-fa163e148d75)",
+		},
+		{
+			caseName:      "empty_namespace",
+			podName:       "test-pod",
+			podNamespace:  "",
+			podUID:        "551f5a43-9f2f-11e7-a589-fa163e148d75",
+			expectedValue: "test-pod_(551f5a43-9f2f-11e7-a589-fa163e148d75)",
+		},
+		{
+			caseName:      "normal_case",
+			podName:       "test-pod",
+			podNamespace:  metav1.NamespaceDefault,
+			podUID:        "551f5a43-9f2f-11e7-a589-fa163e148d75",
+			expectedValue: "test-pod_default(551f5a43-9f2f-11e7-a589-fa163e148d75)",
+		},
+		{
+			caseName:      "empty_uid",
+			podName:       "test-pod",
+			podNamespace:  metav1.NamespaceDefault,
+			podUID:        "",
+			expectedValue: "test-pod_default()",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.caseName, func(t *testing.T) {
+			realPodDesc := PodDesc(testCase.podName, testCase.podNamespace, testCase.podUID)
+			assert.Equal(t, testCase.expectedValue, realPodDesc)
+		})
+	}
+}
