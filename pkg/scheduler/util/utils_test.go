@@ -1511,3 +1511,51 @@ func TestIsScalarResourceName(t *testing.T) {
 		})
 	}
 }
+
+func TestPodPreemptionPolicy(t *testing.T) {
+	preemptNever := v1.PreemptNever
+	preemptLowerPriority := v1.PreemptLowerPriority
+
+	tests := []struct {
+		name string
+		pod  *v1.Pod
+		want v1.PreemptionPolicy
+	}{
+		{
+			name: "nil pod",
+			pod:  nil,
+			want: v1.PreemptLowerPriority,
+		},
+		{
+			name: "unset preemption policy",
+			pod:  &v1.Pod{},
+			want: v1.PreemptLowerPriority,
+		},
+		{
+			name: "explicit PreemptNever",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					PreemptionPolicy: &preemptNever,
+				},
+			},
+			want: v1.PreemptNever,
+		},
+		{
+			name: "explicit PreemptLowerPriority",
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					PreemptionPolicy: &preemptLowerPriority,
+				},
+			},
+			want: v1.PreemptLowerPriority,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := PodPreemptionPolicy(tc.pod); got != tc.want {
+				t.Errorf("PodPreemptionPolicy() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
