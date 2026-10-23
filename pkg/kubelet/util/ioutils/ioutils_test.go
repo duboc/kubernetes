@@ -19,6 +19,7 @@ package ioutils
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math/rand"
 	"testing"
 
@@ -78,6 +79,67 @@ func TestLimitWriter(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestLimitWriterEdgeCases(t *testing.T) {
+	type writeOp struct {
+		data    []byte
+		wantN   int
+		wantErr error
+	}
+
+	tests := []struct {
+		name       string
+		limit      int64
+		writes     []writeOp
+		wantBuffer []byte
+	}{
+		{
+			name:  "zero limit",
+			limit: 0,
+			writes: []writeOp{
+				{data: []byte("hello"), wantN: 0, wantErr: io.ErrShortWrite},
+			},
+			wantBuffer: nil,
+		},
+		{
+			name:  "single write larger than limit",
+			limit: 4,
+			writes: []writeOp{
+				{data: []byte("0123456789"), wantN: 4, wantErr: io.ErrShortWrite},
+			},
+			wantBuffer: []byte("0123"),
+		},
+		{
+			name:  "successive writes crossing the limit",
+			limit: 5,
+			writes: []writeOp{
+				{data: []byte("abc"), wantN: 3, wantErr: nil},
+				{data: []byte("def"), wantN: 2, wantErr: io.ErrShortWrite},
+				{data: []byte("ghi"), wantN: 0, wantErr: io.ErrShortWrite},
+			},
+			wantBuffer: []byte("abcde"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := &bytes.Buffer{}
+			w := LimitWriter(buf, tc.limit)
+
+			for _, op := range tc.writes {
+				n, err := w.Write(op.data)
+				assert.Equal(t, op.wantN, n)
+				if op.wantErr != nil {
+					assert.ErrorIs(t, err, op.wantErr)
+				} else {
+					assert.NoError(t, err)
+				}
+			}
+
+			assert.Equal(t, tc.wantBuffer, buf.Bytes())
 		})
 	}
 }
