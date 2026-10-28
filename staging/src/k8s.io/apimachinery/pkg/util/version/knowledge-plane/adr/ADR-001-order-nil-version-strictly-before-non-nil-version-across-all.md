@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Requirements:** REQ-001
-- **Work items:** —
+- **Work items:** #8 (commit d12a0b1c)
 - **Migrations:** —
 
 ## Context

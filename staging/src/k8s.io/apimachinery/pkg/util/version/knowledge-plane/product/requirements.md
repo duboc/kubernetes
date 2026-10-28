@@ -16,9 +16,9 @@ Each requirement has a stable ID. Never renumber an ID; mark it `Withdrawn` inst
 
 ### Acceptance criteria
 
-- [ ] (*Version).AtLeast, (*Version).LessThan, and (*Version).GreaterThan never panic when receiver or argument is nil, ordering nil strictly before any non-nil *Version and equal to nil
-- [ ] (*Version).Core() returns a semantic Major.Minor.Patch *Version copy stripped of preRelease and buildMetadata (or nil when receiver is nil)
-- [ ] Table-driven unit tests in version_test.go cover nil receivers, nil arguments, generic versions, and pre-release/build-metadata stripping
+- [x] (*Version).AtLeast, (*Version).LessThan, and (*Version).GreaterThan never panic when receiver or argument is nil, ordering nil strictly before any non-nil *Version and equal to nil
+- [x] (*Version).Core() returns a semantic Major.Minor.Patch *Version copy stripped of preRelease and buildMetadata (or nil when receiver is nil)
+- [x] Table-driven unit tests in version_test.go cover nil receivers, nil arguments, generic versions, and pre-release/build-metadata stripping
 
 ### Work items
 
@@ -30,8 +30,8 @@ Each requirement has a stable ID. Never renumber an ID; mark it `Withdrawn` inst
 
 ### Acceptance criteria
 
-- [ ] version_fuzz_test.go carries the Kubernetes Apache-2.0 header and defines FuzzParseAndCompare(f *testing.F)
-- [ ] go test -fuzz=FuzzParseAndCompare -fuzztime=3s . passes with zero panics and verifies ParseSemantic(v.String()).EqualTo(v) plus Compare antisymmetry
+- [x] version_fuzz_test.go carries the Kubernetes Apache-2.0 header and defines FuzzParseAndCompare(f *testing.F)
+- [x] go test -fuzz=FuzzParseAndCompare -fuzztime=3s . passes with zero panics and verifies ParseSemantic(v.String()).EqualTo(v) plus Compare antisymmetry
 
 ### Work items
 
