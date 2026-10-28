@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+
+	apimachineryversion "k8s.io/apimachinery/pkg/version"
 )
 
 type testItem struct {
@@ -548,3 +550,351 @@ func TestParse(t *testing.T) {
 		}
 	}
 }
+
+func TestNilSafeOrdering(t *testing.T) {
+	v120Semver := MustParseSemantic("1.2.0")
+	v120Alpha := MustParseSemantic("1.2.0-alpha.1")
+	v120Build := MustParseSemantic("1.2.0+build.1")
+	v130Semver := MustParseSemantic("1.3.0")
+	v12Generic := MustParseGeneric("1.2")
+	v123Generic := MustParseGeneric("1.2.3")
+
+	tests := []struct {
+		name        string
+		lhs         *Version
+		rhs         *Version
+		equalTo     bool
+		lessThan    bool
+		greaterThan bool
+		atLeast     bool
+	}{
+		{
+			name:        "nil and nil",
+			lhs:         nil,
+			rhs:         nil,
+			equalTo:     true,
+			lessThan:    false,
+			greaterThan: false,
+			atLeast:     true,
+		},
+		{
+			name:        "nil and semantic version",
+			lhs:         nil,
+			rhs:         v120Semver,
+			equalTo:     false,
+			lessThan:    true,
+			greaterThan: false,
+			atLeast:     false,
+		},
+		{
+			name:        "semantic version and nil",
+			lhs:         v120Semver,
+			rhs:         nil,
+			equalTo:     false,
+			lessThan:    false,
+			greaterThan: true,
+			atLeast:     true,
+		},
+		{
+			name:        "nil and generic version",
+			lhs:         nil,
+			rhs:         v12Generic,
+			equalTo:     false,
+			lessThan:    true,
+			greaterThan: false,
+			atLeast:     false,
+		},
+		{
+			name:        "generic version and nil",
+			lhs:         v12Generic,
+			rhs:         nil,
+			equalTo:     false,
+			lessThan:    false,
+			greaterThan: true,
+			atLeast:     true,
+		},
+		{
+			name:        "pre-release and release semantic versions",
+			lhs:         v120Alpha,
+			rhs:         v120Semver,
+			equalTo:     false,
+			lessThan:    true,
+			greaterThan: false,
+			atLeast:     false,
+		},
+		{
+			name:        "release and pre-release semantic versions",
+			lhs:         v120Semver,
+			rhs:         v120Alpha,
+			equalTo:     false,
+			lessThan:    false,
+			greaterThan: true,
+			atLeast:     true,
+		},
+		{
+			name:        "semantic versions differing only by build metadata",
+			lhs:         v120Semver,
+			rhs:         v120Build,
+			equalTo:     true,
+			lessThan:    false,
+			greaterThan: false,
+			atLeast:     true,
+		},
+		{
+			name:        "distinct semantic versions",
+			lhs:         v120Semver,
+			rhs:         v130Semver,
+			equalTo:     false,
+			lessThan:    true,
+			greaterThan: false,
+			atLeast:     false,
+		},
+		{
+			name:        "generic 1.2 and semantic 1.2.0",
+			lhs:         v12Generic,
+			rhs:         v120Semver,
+			equalTo:     true,
+			lessThan:    false,
+			greaterThan: false,
+			atLeast:     true,
+		},
+		{
+			name:        "generic 1.2 and generic 1.2.3",
+			lhs:         v12Generic,
+			rhs:         v123Generic,
+			equalTo:     false,
+			lessThan:    true,
+			greaterThan: false,
+			atLeast:     false,
+		},
+		{
+			name:        "generic 1.2.3 and generic 1.2",
+			lhs:         v123Generic,
+			rhs:         v12Generic,
+			equalTo:     false,
+			lessThan:    false,
+			greaterThan: true,
+			atLeast:     true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.lhs.EqualTo(tc.rhs); got != tc.equalTo {
+				t.Errorf("(%v).EqualTo(%v) = %v, want %v", tc.lhs, tc.rhs, got, tc.equalTo)
+			}
+			if got := tc.lhs.LessThan(tc.rhs); got != tc.lessThan {
+				t.Errorf("(%v).LessThan(%v) = %v, want %v", tc.lhs, tc.rhs, got, tc.lessThan)
+			}
+			if got := tc.lhs.GreaterThan(tc.rhs); got != tc.greaterThan {
+				t.Errorf("(%v).GreaterThan(%v) = %v, want %v", tc.lhs, tc.rhs, got, tc.greaterThan)
+			}
+			if got := tc.lhs.AtLeast(tc.rhs); got != tc.atLeast {
+				t.Errorf("(%v).AtLeast(%v) = %v, want %v", tc.lhs, tc.rhs, got, tc.atLeast)
+			}
+
+			// Invariant: LessThan(other) == !AtLeast(other)
+			if tc.lhs.LessThan(tc.rhs) != !tc.lhs.AtLeast(tc.rhs) {
+				t.Errorf("invariant violated for (%v, %v): LessThan != !AtLeast", tc.lhs, tc.rhs)
+			}
+			// Antisymmetry: lhs.LessThan(rhs) == rhs.GreaterThan(lhs)
+			if tc.lhs.LessThan(tc.rhs) != tc.rhs.GreaterThan(tc.lhs) {
+				t.Errorf("antisymmetry violated for (%v, %v): lhs.LessThan(rhs) != rhs.GreaterThan(lhs)", tc.lhs, tc.rhs)
+			}
+		})
+	}
+}
+
+func TestCore(t *testing.T) {
+	if got := (*Version)(nil).Core(); got != nil {
+		t.Fatalf("(*Version)(nil).Core() = %v, want nil", got)
+	}
+
+	tests := []struct {
+		name               string
+		input              *Version
+		expectedString     string
+		expectedComponents []uint
+	}{
+		{
+			name:               "semantic version with pre-release and build metadata",
+			input:              MustParseSemantic("1.2.3-alpha.1+build.456"),
+			expectedString:     "1.2.3",
+			expectedComponents: []uint{1, 2, 3},
+		},
+		{
+			name:               "semantic version with pre-release only",
+			input:              MustParseSemantic("1.2.3-beta.2"),
+			expectedString:     "1.2.3",
+			expectedComponents: []uint{1, 2, 3},
+		},
+		{
+			name:               "semantic version with build metadata only",
+			input:              MustParseSemantic("1.2.3+20130313"),
+			expectedString:     "1.2.3",
+			expectedComponents: []uint{1, 2, 3},
+		},
+		{
+			name:               "plain semantic version",
+			input:              MustParseSemantic("1.2.3"),
+			expectedString:     "1.2.3",
+			expectedComponents: []uint{1, 2, 3},
+		},
+		{
+			name:               "generic 2-component version",
+			input:              MustParseGeneric("1.2"),
+			expectedString:     "1.2.0",
+			expectedComponents: []uint{1, 2, 0},
+		},
+		{
+			name:               "generic 4-component version",
+			input:              MustParseGeneric("1.2.3.4"),
+			expectedString:     "1.2.3",
+			expectedComponents: []uint{1, 2, 3},
+		},
+		{
+			name:               "single-component struct",
+			input:              &Version{components: []uint{4}},
+			expectedString:     "4.0.0",
+			expectedComponents: []uint{4, 0, 0},
+		},
+		{
+			name:               "empty-component struct",
+			input:              &Version{},
+			expectedString:     "0.0.0",
+			expectedComponents: []uint{0, 0, 0},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			origComponents := append([]uint(nil), tc.input.Components()...)
+			origPreRelease := tc.input.PreRelease()
+			origBuildMetadata := tc.input.BuildMetadata()
+
+			core := tc.input.Core()
+			if core == nil {
+				t.Fatalf("Core() returned nil for non-nil input %v", tc.input)
+			}
+			if !core.semver {
+				t.Errorf("Core().semver = false, want true")
+			}
+			if got := core.String(); got != tc.expectedString {
+				t.Errorf("Core().String() = %q, want %q", got, tc.expectedString)
+			}
+			if !reflect.DeepEqual(core.Components(), tc.expectedComponents) {
+				t.Errorf("Core().Components() = %v, want %v", core.Components(), tc.expectedComponents)
+			}
+			if core.PreRelease() != "" {
+				t.Errorf("Core().PreRelease() = %q, want empty", core.PreRelease())
+			}
+			if core.BuildMetadata() != "" {
+				t.Errorf("Core().BuildMetadata() = %q, want empty", core.BuildMetadata())
+			}
+
+			// Verify slice isolation and non-mutation of original receiver.
+			core.Components()[0] = 999
+			if !reflect.DeepEqual(tc.input.Components(), origComponents) {
+				t.Errorf("mutating Core().Components() mutated input components: got %v, want %v", tc.input.Components(), origComponents)
+			}
+			if tc.input.PreRelease() != origPreRelease || tc.input.BuildMetadata() != origBuildMetadata {
+				t.Errorf("Core() mutated input metadata")
+			}
+		})
+	}
+}
+
+func TestVersionHelpers(t *testing.T) {
+	assertPanics := func(t *testing.T, name string, fn func()) {
+		t.Helper()
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("%s did not panic on invalid input", name)
+			}
+		}()
+		fn()
+	}
+
+	if got := MustParseGeneric("1.2.3.4").String(); got != "1.2.3.4" {
+		t.Errorf("MustParseGeneric(\"1.2.3.4\").String() = %q, want \"1.2.3.4\"", got)
+	}
+	assertPanics(t, "MustParseGeneric", func() {
+		MustParseGeneric("invalid")
+	})
+
+	if got := MustParse("1.2.3-alpha.1").String(); got != "1.2.3-alpha.1" {
+		t.Errorf("MustParse(\"1.2.3-alpha.1\").String() = %q, want \"1.2.3-alpha.1\"", got)
+	}
+	assertPanics(t, "MustParse", func() {
+		MustParse("invalid")
+	})
+
+	mm, err := ParseMajorMinor("1.28.4")
+	if err != nil || mm.String() != "1.28" {
+		t.Errorf("ParseMajorMinor(\"1.28.4\") = (%v, %v), want (\"1.28\", nil)", mm, err)
+	}
+	if _, err := ParseMajorMinor("invalid"); err == nil {
+		t.Errorf("ParseMajorMinor(\"invalid\") expected error, got nil")
+	}
+	if got := MustParseMajorMinor("1.28.4").String(); got != "1.28" {
+		t.Errorf("MustParseMajorMinor(\"1.28.4\").String() = %q, want \"1.28\"", got)
+	}
+	assertPanics(t, "MustParseMajorMinor", func() {
+		MustParseMajorMinor("invalid")
+	})
+
+	assertPanics(t, "MustParseSemantic", func() {
+		MustParseSemantic("1.2")
+	})
+
+	// Overflow component error branch in parse
+	if _, err := ParseSemantic("999999999999999999999999999999.0.0"); err == nil {
+		t.Errorf("expected overflow error from ParseSemantic, got nil")
+	}
+
+	base := MustParseSemantic("1.5.2-alpha.1+build.10")
+	if got := base.WithMajor(2).String(); got != "2.5.2-alpha.1+build.10" {
+		t.Errorf("WithMajor(2) = %q, want \"2.5.2-alpha.1+build.10\"", got)
+	}
+	if got := base.WithMinor(8).String(); got != "1.8.2-alpha.1+build.10" {
+		t.Errorf("WithMinor(8) = %q, want \"1.8.2-alpha.1+build.10\"", got)
+	}
+	if got := base.WithPatch(9).String(); got != "1.5.9-alpha.1+build.10" {
+		t.Errorf("WithPatch(9) = %q, want \"1.5.9-alpha.1+build.10\"", got)
+	}
+	if got := base.WithPreRelease(""); got != base {
+		t.Errorf("WithPreRelease(\"\") should return original pointer %p, got %p", base, got)
+	}
+	if got := base.WithPreRelease("rc.1").String(); got != "1.5.2-rc.1+build.10" {
+		t.Errorf("WithPreRelease(\"rc.1\") = %q, want \"1.5.2-rc.1+build.10\"", got)
+	}
+	if got := base.WithBuildMetadata("sha.999").String(); got != "1.5.2-alpha.1+sha.999" {
+		t.Errorf("WithBuildMetadata(\"sha.999\") = %q, want \"1.5.2-alpha.1+sha.999\"", got)
+	}
+	if got := base.SubtractMinor(2).String(); got != "1.3" {
+		t.Errorf("SubtractMinor(2) = %q, want \"1.3\"", got)
+	}
+	if got := base.AddMinor(3).String(); got != "1.8" {
+		t.Errorf("AddMinor(3) = %q, want \"1.8\"", got)
+	}
+
+	if got := (*Version)(nil).String(); got != "<nil>" {
+		t.Errorf("(*Version)(nil).String() = %q, want \"<nil>\"", got)
+	}
+	if _, err := base.Compare("not-a-version"); err == nil {
+		t.Errorf("Compare(\"not-a-version\") expected error, got nil")
+	}
+
+	withInfo := base.WithInfo(apimachineryversion.Info{Major: "9", Minor: "9"})
+	if !withInfo.EqualTo(base) {
+		t.Errorf("WithInfo should preserve version value")
+	}
+	if got := (*Version)(nil).Info(); got != nil {
+		t.Errorf("(*Version)(nil).Info() = %v, want nil", got)
+	}
+	info := MustParseSemantic("0.2.3").Info()
+	if info == nil || info.Major != "" || info.Minor != "2" || info.GitVersion != "0.2.3" {
+		t.Errorf("MustParseSemantic(\"0.2.3\").Info() = %+v, unexpected result", info)
+	}
+}
+

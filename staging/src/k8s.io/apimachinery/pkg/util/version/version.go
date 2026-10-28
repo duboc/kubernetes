@@ -306,6 +306,26 @@ func (v *Version) WithBuildMetadata(buildMetadata string) *Version {
 	return &result
 }
 
+// Core returns a new semantic Version containing only the Major.Minor.Patch
+// components of v, stripped of any pre-release or build metadata. It returns
+// nil if v is nil.
+func (v *Version) Core() *Version {
+	if v == nil {
+		return nil
+	}
+	var major, minor uint
+	if len(v.components) > 0 {
+		major = v.components[0]
+	}
+	if len(v.components) > 1 {
+		minor = v.components[1]
+	}
+	return &Version{
+		components: []uint{major, minor, v.Patch()},
+		semver:     true,
+	}
+}
+
 // String converts a Version back to a string; note that for versions parsed with
 // ParseGeneric, this will not include the trailing uninterpreted portion of the version
 // number.
@@ -336,6 +356,15 @@ func (v *Version) String() string {
 // compareInternal returns -1 if v is less than other, 1 if it is greater than other, or 0
 // if they are equal
 func (v *Version) compareInternal(other *Version) int {
+	if v == nil && other == nil {
+		return 0
+	}
+	if v == nil {
+		return -1
+	}
+	if other == nil {
+		return 1
+	}
 
 	vLen := len(v.components)
 	oLen := len(other.components)
